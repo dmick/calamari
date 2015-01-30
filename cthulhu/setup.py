@@ -12,7 +12,8 @@ setup(
     entry_points={
         'console_scripts': [
             'cthulhu-manager = cthulhu.manager.manager:main',
-            'calamari-ctl = cthulhu.calamari_ctl:main'
+            'calamari-ctl = cthulhu.calamari_ctl:main',
+            'calamari-osd-location = cthulhu.calamari_osd_location:main'
         ]
     }
 )
