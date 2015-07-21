@@ -11,30 +11,50 @@ environment.
 import gevent
 import logging
 
+# used from multiple places; make the log simple
+log = logging.getLogger(__name__)
+log.addHandler(logging.StreamHandler())
 
-try:
-    try:
-        from salt.client import condition_kwarg
-    except ImportError:
+def try_import(modsympairs, fail_value=None):
+    '''
+    modsympairs is an iterable of tuples (mod, sym)
+    Try importing sym from mod; if sym contains 'as',
+    assume it's 'rename_sym as sym'.
+    If all imports fail, set sym to fail_value.
+    '''
+    for (mod, sym) in modsympairs:
+        success = False
+        try:
+            if ' as ' in sym:
+                rename_sym, sym = sym.split(' as ')
+                tempmod = __import__(mod, globals(), locals(), list(rename_sym))
+            else:
+                tempmod = __import__(mod, globals(), locals(), list(sym))
+            globals()[sym] = getattr(tempmod, sym)
+            success = True
+            break
+        except (ImportError, AttributeError):
+            pass
+
+    if not success:
+        log.warn("import %s failed unexpectedly" % sym)
+        globals()[sym] = fail_value
+
+
+try_import(
+    (
+        ('salt.client', 'condition_kwarg'),
         # Salt moved this in 382dd5e
-        from salt.utils.args import condition_input as condition_kwarg
-
-    from salt.client import LocalClient  # noqa
-    from salt.utils.event import MasterEvent  # noqa
-    from salt.key import Key  # noqa
-    from salt.config import master_config  # noqa
-    from salt.utils.master import MasterPillarUtil  # noqa
-    from salt.config import client_config  # noqa
-    from salt.loader import _create_loader
-except ImportError:
-    condition_kwarg = None
-    LocalClient = None
-    MasterEvent = None
-    Key = None
-    master_config = None
-    MasterPillarUtil = None
-    client_config = lambda x: None
-    _create_loader = None
+        ('salt.utils.args', 'condition_input as condition_kwarg')
+    ),
+)
+try_import((('salt.client', 'LocalClient'),))
+try_import((('salt_utils.event', 'MasterEvent'),))
+try_import((('salt.key', 'Key'),))
+try_import((('salt.config', 'master_config'),))
+try_import((('salt.utils.master', 'MasterPillarUtil'),))
+try_import((('salt.config', 'client_config'),), lambda x: None)
+try_import((('salt.loader', '_create_loader'),))
 
 
 class SaltEventSource(object):
@@ -61,7 +81,7 @@ class SaltEventSource(object):
         self._log = logging.getLogger('.'.join((logger.name, 'salt')))
         self._silence_counter = 0
         self._config = config
-        self._master_event = MasterEvent(self._config['sock_dir'])
+        self._master_event = MasterEvent(self._config['sock_dir'])  # noqa
 
     def _destroy_conn(self, old_ev):
         old_ev.destroy()
@@ -81,7 +101,7 @@ class SaltEventSource(object):
                 # messages being a symptom of a connection that has gone bad.
                 old_ev = self._master_event
                 gevent.spawn(lambda: self._destroy_conn(old_ev))
-                self._master_event = MasterEvent(self._config['sock_dir'])
+                self._master_event = MasterEvent(self._config['sock_dir'])  # noqa
         else:
             self._silence_counter = 0
             return ev
